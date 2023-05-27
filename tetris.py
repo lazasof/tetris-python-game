@@ -1,5 +1,17 @@
 import pygame
 import random
+from builtins import reversed
+import numpy as np
+from pygame.locals import *
+
+
+# Define the mapping between predicted action integers and keyboard events
+ACTION_MAPPING = {
+    0: K_LEFT,
+    1: K_RIGHT,
+    2: K_DOWN,
+    3: K_UP
+}
 
 # Initialize Pygame
 pygame.init()
@@ -33,6 +45,7 @@ SHAPES = [
 SHAPES_COLORS = [CYAN, YELLOW, PURPLE, GREEN, RED, ORANGE, BLUE]
 
 # Define block properties
+
 BLOCK_SIZE = 30
 GRID_WIDTH = 10
 GRID_HEIGHT = 20
@@ -89,6 +102,7 @@ def place_block(block):
     if delay_time>50:
         delay_time = delay_time -5 
 
+
 # Remove completed rows
 def remove_completed_rows():
     rows_to_remove = []
@@ -99,6 +113,7 @@ def remove_completed_rows():
         del grid[row]
         grid.insert(0, [None] * GRID_WIDTH)
     return len(rows_to_remove)
+
 
 # Draw the grid and blocks
 def draw_grid():
@@ -117,9 +132,6 @@ def draw_grid():
                 (GRID_OFFSET_X + col * BLOCK_SIZE, GRID_OFFSET_Y + row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE),
                 1
             )
-			
-
-
 
 # Draw the current block
 def draw_block(block):
@@ -150,23 +162,45 @@ def draw_next_piece(next_piece):
 # Check if the game is over
 def is_game_over():
     return any(grid[0])
+    
+# Translate the grid into 0s and 1s
+def translate_grid(grid):
+    translated_grid = [[0 if cell is None else 1 for cell in row] for row in grid]
+    return translated_grid
+
 
 # Game loop
 clock = pygame.time.Clock()
 fall_time = 0
-block = create_block()
-next_piece = create_block()
 game_over = False
+block = create_block()
+rep_block= block["shape"]
+padded_block= np.pad(rep_block, ((0, 4 - len(rep_block)), (0, 4 - len(rep_block[0]))), mode='constant')
+next_piece = create_block()
+rep_next_piece=next_piece["shape"]
+padded_next_piece= np.pad(rep_next_piece, ((0, 4 - len(rep_next_piece)), (0, 4 - len(rep_next_piece[0]))), mode='constant')
 score = 0
+reward=0
+translated_grid = translate_grid(grid)
+
+
 delay_time = 500  # Delay in milliseconds before the tetromino is locked in place
 last_move_time = pygame.time.get_ticks()
 piece_placed = False
+
+def calculate_reward(rows_cleared):
+    global reward
+    if rows_cleared == 4:
+        reward += 800  # Tetris reward
+    else:
+        reward += rows_cleared * 100  # Points per cleared row
+    return reward
 
 
 def update_score(rows_removed):
     global score
     score += 10
-    score += rows_removed * 100  # Score for removing rows
+    score += rows_removed * 100	# Score for removing rows
     if rows_removed == 4:
         score += 400  # Bonus score for removing four rows
 		
@@ -183,7 +217,7 @@ while not game_over:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             game_over = True
-
+            
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT and is_valid_position(block, dx=-1):
                 block["x"] -= 1
@@ -195,17 +229,28 @@ while not game_over:
                 rotated_shape = list(zip(*reversed(block["shape"])))
                 if is_valid_position({"shape": rotated_shape, "x": block["x"], "y": block["y"]}):
                     block["shape"] = rotated_shape
+                    rep_block= block["shape"]
+                    padded_block= np.pad(rep_block, ((0, 4 - len(rep_block)), (0, 4 - len(rep_block[0]))), mode='constant')
             elif event.key == pygame.K_SPACE:
                 while is_valid_position(block, dy=1):
                     block["y"] += 1
                 place_block(block)
+                translated_grid = translate_grid(grid)
                 piece_placed=True
+                translated_grid = translate_grid(grid)
                 rows_removed = remove_completed_rows()
                 update_score(rows_removed)
+                calculate_reward(rows_removed)
                 
                 if is_game_over():
                     game_over = True
-				
+                else:
+                    block = next_piece
+                    rep_block= block["shape"]
+                    padded_block= np.pad(rep_block, ((0, 4 - len(rep_block)), (0, 4 - len(rep_block[0]))), mode='constant')
+                    next_piece=create_block()
+                    rep_next_piece= next_piece["shape"]
+                    padded_next_piece= np.pad(rep_next_piece, ((0, 4 - len(rep_next_piece)), (0, 4 - len(rep_next_piece[0]))), mode='constant')
 
     # Update
     current_time = pygame.time.get_ticks()
@@ -214,13 +259,19 @@ while not game_over:
             block["y"] += 1
         else:
             place_block(block)
+            translated_grid = translate_grid(grid)
             rows_removed = remove_completed_rows()
             update_score(rows_removed)
+            calculate_reward(rows_removed)
             block = next_piece
+            rep_block= block["shape"]
+            padded_block= np.pad(rep_block, ((0, 4 - len(rep_block)), (0, 4 - len(rep_block[0]))), mode='constant')
             if is_game_over():
                 game_over = True
-				
             next_piece = create_block()
+            rep_next_piece= next_piece["shape"]
+            padded_next_piece= np.pad(rep_next_piece, ((0, 4 - len(rep_next_piece)), (0, 4 - len(rep_next_piece[0]))), mode='constant')
+            
         last_move_time = current_time
 		
     # Choose the next piece
@@ -253,10 +304,18 @@ while not game_over:
         score_text_rect = score_text.get_rect()
         score_text_rect.topleft = (10, 10)
 
-
+translated_grid = translate_grid(grid)
 # Print final score
 print("Game Over")
 print("Final Score:", score)
+print("Final Reward:", reward)
+print("Translated Grid:")
+print(np.array(translated_grid))
+print("Translated Current block:")
+print(np.array(padded_block))
+print("Translated Next Piece:")
+print(np.array(padded_next_piece))
+
 
 # Quit the game
 pygame.quit()
